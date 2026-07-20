@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family: Arial, sans-serif;
+      }
+
+      body {
+        width: 340px;
+        background: #f4f7fb;
+        padding: 15px;
+      }
+
+      h2 {
+        color: #2b6cff;
+        text-align: center;
+        margin-bottom: 15px;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 10px;
+        padding: 12px;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      .row {
+        display: flex;
+        justify-content: space-between;
+        margin: 8px 0;
+      }
+
+      button {
+        width: 100%;
+        border: none;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 10px;
+        cursor: pointer;
+        font-weight: bold;
+      }
+
+      #scan {
+        background: #2b6cff;
+        color: white;
+      }
+
+      #download {
+        background: #17a34a;
+        color: white;
+      }
+
+      #clear {
+        background: #ef4444;
+        color: white;
+      }
+
+      #force {
+        background: #ff9800;
+        color: white;
+      }
+
+      #status {
+        margin-top: 12px;
+        color: #666;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h2>🚀 Naukri Apply Finder</h2>
+
+    <div class="card">
+      <div class="row">
+        <span>Cached Jobs</span>
+        <b id="cached">0</b>
+      </div>
+
+      <div class="row">
+        <span>Company Apply</span>
+        <b id="found">0</b>
+      </div>
+
+      <div class="row">
+        <span>Last Scan</span>
+        <b id="lastScan">Never</b>
+      </div>
+    </div>
+
+    <button id="scan">🔍 Scan Current Page</button>
+
+    <button id="download">📄 Download CSV</button>
+
+    <button id="force">🔄 Force Rescan</button>
+
+    <button id="clear">🗑 Clear Cache</button>
+
+    <div id="status">Ready</div>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Naukri Company Site Scanner",
+  "version": "1.0",
+
+  "permissions": ["tabs", "activeTab", "scripting", "downloads", "storage"],
+
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "background.js"
+  },
+
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
