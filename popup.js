@@ -1,5 +1,7 @@
 document.addEventListener("DOMContentLoaded", init);
 
+let pollTimer = null;
+
 async function init() {
   await refreshStats();
 
@@ -43,27 +45,6 @@ async function scan() {
   chrome.runtime.sendMessage({
     action: "scan",
   });
-
-  pollUntilFinished();
-}
-
-async function pollUntilFinished() {
-  const timer = setInterval(async () => {
-    const bg = await chrome.runtime.getBackgroundPage?.();
-
-    // MV3 doesn't support getBackgroundPage.
-    // So instead we'll just refresh stats every second.
-    await refreshStats();
-  }, 1000);
-
-  // Stop polling after 30 seconds.
-  setTimeout(async () => {
-    clearInterval(timer);
-
-    await refreshStats();
-
-    setStatus("Finished");
-  }, 30000);
 }
 
 function download() {
@@ -90,19 +71,23 @@ async function forceRescan() {
   chrome.runtime.sendMessage({
     action: "forceRescan",
   });
-
-  pollUntilFinished();
 }
 
 function setStatus(text) {
   document.getElementById("status").textContent = text;
 }
 
-chrome.runtime.onMessage.addListener((msg) => {
+chrome.runtime.onMessage.addListener(async (msg) => {
   if (msg.action !== "progress") return;
 
-  document.getElementById("status").textContent = msg.status;
+  setStatus(msg.status);
+
   document.getElementById("progress").textContent =
     `${msg.current} / ${msg.total}`;
+
   document.getElementById("companyJobs").textContent = msg.found;
+
+  if (msg.status === "Finished") {
+    await refreshStats();
+  }
 });
