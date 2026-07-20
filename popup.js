@@ -1,54 +1,108 @@
-async function refresh() {
-  const {
-    jobCache = {},
-    lastScan,
-    companyApplyJobs = [],
-  } = await chrome.storage.local.get([
+document.addEventListener("DOMContentLoaded", init);
+
+async function init() {
+  await refreshStats();
+
+  document.getElementById("scanBtn").addEventListener("click", scan);
+
+  document.getElementById("downloadBtn").addEventListener("click", download);
+
+  document.getElementById("clearBtn").addEventListener("click", clearCache);
+
+  document.getElementById("forceBtn").addEventListener("click", forceRescan);
+}
+
+async function refreshStats() {
+  const { jobCache = {}, lastScan } = await chrome.storage.local.get([
     "jobCache",
     "lastScan",
-    "companyApplyJobs",
   ]);
 
-  document.getElementById("cached").textContent = Object.keys(jobCache).length;
+  const cachedJobs = Object.keys(jobCache).length;
 
-  document.getElementById("found").textContent = companyApplyJobs.length;
+  const companyJobs = Object.values(jobCache).filter((job) => {
+    if (typeof job === "boolean") {
+      return job;
+    }
+
+    return job?.hasCompanyApply === true;
+  }).length;
+
+  document.getElementById("cachedJobs").textContent = cachedJobs;
+
+  document.getElementById("companyJobs").textContent = companyJobs;
 
   document.getElementById("lastScan").textContent = lastScan
     ? new Date(lastScan).toLocaleString()
     : "Never";
 }
 
-refresh();
-
-document.getElementById("scan").onclick = () => {
-  chrome.runtime.sendMessage({
-    action: "scan",
-  });
-  window.close();
-};
-
-document.getElementById("clear").onclick = async () => {
-  await chrome.storage.local.clear();
-
-  refresh();
-
-  document.getElementById("status").textContent = "Cache Cleared";
-};
-
-document.getElementById("force").onclick = async () => {
-  await chrome.storage.local.remove("jobCache");
+async function scan() {
+  setStatus("Scanning...");
 
   chrome.runtime.sendMessage({
     action: "scan",
   });
 
-  window.close();
-};
+  pollUntilFinished();
+}
 
-document.getElementById("download").onclick = () => {
+async function pollUntilFinished() {
+  const timer = setInterval(async () => {
+    const bg = await chrome.runtime.getBackgroundPage?.();
+
+    // MV3 doesn't support getBackgroundPage.
+    // So instead we'll just refresh stats every second.
+    await refreshStats();
+  }, 1000);
+
+  // Stop polling after 30 seconds.
+  setTimeout(async () => {
+    clearInterval(timer);
+
+    await refreshStats();
+
+    setStatus("Finished");
+  }, 30000);
+}
+
+function download() {
   chrome.runtime.sendMessage({
     action: "downloadCSV",
   });
+}
 
-  window.close();
-};
+async function clearCache() {
+  if (!confirm("Clear all cached jobs?")) return;
+
+  chrome.runtime.sendMessage({
+    action: "clearCache",
+  });
+
+  setTimeout(refreshStats, 300);
+}
+
+async function forceRescan() {
+  if (!confirm("Force rescan all jobs?")) return;
+
+  setStatus("Scanning...");
+
+  chrome.runtime.sendMessage({
+    action: "forceRescan",
+  });
+
+  pollUntilFinished();
+}
+
+function setStatus(text) {
+  document.getElementById("status").textContent = text;
+}
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg.action !== "progress") return;
+
+  document.getElementById("status").textContent = msg.status;
+  document.getElementById("progress").textContent =
+    `${msg.current} / ${msg.total}`;
+  document.getElementById("companyJobs").textContent = msg.found;
+});
