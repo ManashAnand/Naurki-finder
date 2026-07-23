@@ -2,96 +2,290 @@
 
 A Manifest V3 Chrome Extension that automates extracting **official company career page URLs** from Naukri job listings, tracks application statuses, caches scan results to minimize redundant requests, and exports actionable job data to CSV.
 
+---
+
 ## ✨ Features
 
-- 🔍 **Automated Page Scanning**: Scans active Naukri search result pages and job cards in real time.
-- 🌐 **Direct URL Extraction**: Captures direct external company career/ATS links (Workday, Greenhouse, Lever, etc.).
-- 💾 **Local Caching**: Stores scan results locally using chrome.storage.local to prevent duplicate scanning.
-- 📋 **Application Tracking**: Differentiates between applied and pending opportunities.
-- 📤 **CSV Export**: Generate customized CSV reports (Pending Jobs or Complete Job Audit).
-- 🗑️ **Cache & State Management**: Clear cached job records and reset live progress counters on demand.
-- 📊 **Real-time Stats**: Track cached listings, company-apply counts, and last scan timestamps directly from the popup UI.
+- 🔍 **Automated Page Scanning** – Scans active Naukri search result pages and job cards in real time.
+- 🌐 **Direct URL Extraction** – Captures direct external company career/ATS links (Workday, Greenhouse, Lever, etc.).
+- 💾 **Local Caching** – Stores scan results using `chrome.storage.local` to prevent duplicate scanning.
+- 📋 **Application Tracking** – Differentiates between applied and pending opportunities.
+- 📤 **CSV Export** – Generate customized CSV reports (Pending Jobs or Complete Job Audit).
+- 🗑️ **Cache & State Management** – Clear cached job records and reset live progress counters on demand.
+- 📊 **Real-time Stats** – View cached listings, company-apply counts, and last scan timestamps directly from the popup UI.
 
-## 🛠️ Architecture Overview
+---
 
-Plaintext
+# 🏗️ Architecture Overview
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML `+----------------------+                      |      popup.html      |                      |    (Extension UI)    |                      +----------+-----------+                                 |                                 | User Triggers                                 v                      +----------------------+                      |       popup.js       |                      |  UI Event Handlers   |                      +----------+-----------+                                 |                     chrome.runtime.sendMessage()                                 |                                 v            +-----------------------------------+            |           background.js           |            |   (MV3 Service Worker Controller) |            +-----------------------------------+               |               |               |               |               |               |               v               v               v     +----------------+ +---------------+ +----------------+     | Chrome Storage | |  Active Tab   | | Downloads API  |     | Cache & Stats  | | Content Script| | CSV Generation |     +-------+--------+ +-------+-------+ +----------------+             |                  |             |                  v             |        +-------------------+             |        |     script.js     |             |        |  (Content Script) |             +------- |  DOM Extraction   |        Stores Cache  +-------------------+`
+```text
+                    +----------------------+
+                    |      popup.html      |
+                    |    (Extension UI)    |
+                    +----------+-----------+
+                               |
+                               | User Triggers
+                               v
+                    +----------------------+
+                    |       popup.js       |
+                    |  UI Event Handlers   |
+                    +----------+-----------+
+                               |
+                   chrome.runtime.sendMessage()
+                               |
+                               v
+          +-----------------------------------+
+          |           background.js           |
+          |   (MV3 Service Worker Controller) |
+          +-----------------------------------+
+             |               |               |
+             |               |               |
+             v               v               v
+   +----------------+ +---------------+ +----------------+
+   | Chrome Storage | |  Active Tab   | | Downloads API  |
+   | Cache & Stats  | | Content Script| | CSV Generation |
+   +-------+--------+ +-------+-------+ +----------------+
+           |                  |
+           |                  v
+           |        +-------------------+
+           |        |     script.js     |
+           |        |  (Content Script) |
+           +------->|  DOM Extraction   |
+      Stores Cache  +-------------------+
+```
 
-## 📁 Project Structure
+---
 
-Plaintext
+# 📁 Project Structure
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   .  ├── manifest.json       # Manifest V3 extension configuration  ├── popup.html          # Extension popup user interface  ├── popup.js            # UI logic, state rendering, and background messaging  ├── popup.css           # Styling for the popup interface  ├── background.js       # Service worker managing storage, messages, and exports  ├── script.js           # Content script for target DOM extraction on Naukri  ├── icons/              # Extension icons (16px, 48px, 128px)  └── README.md           # Project documentation   `
+```text
+.
+├── manifest.json       # Manifest V3 extension configuration
+├── popup.html          # Extension popup UI
+├── popup.js            # UI logic and event handlers
+├── popup.css           # Popup styling
+├── background.js       # Service worker and central controller
+├── script.js           # Content script for DOM extraction
+├── icons/
+│   ├── icon16.png
+│   ├── icon48.png
+│   └── icon128.png
+└── README.md
+```
 
-## ⚙️ Component Responsibilities
+---
 
-### 1\. popup.js (UI Layer)
+# ⚙️ Component Responsibilities
 
-- Handles user interactions (Scan, Download CSV, Clear Cache).
-- Listens for real-time progress runtime messages to update scan counts and status indicators.
-- Queries chrome.storage.local to display total cached jobs and last scan timestamps.
+## popup.js (UI Layer)
 
-### 2\. background.js (Service Worker / Controller)
+Responsible for all popup interactions.
 
-- Serves as the central state manager and message router.
-- Handles asynchronous requests to chrome.storage.local.
-- Assembles CSV strings from stored job metadata and triggers file downloads via chrome.downloads.
+- Handles Scan, Download CSV, Clear Cache, and Force Scan actions.
+- Sends runtime messages to the service worker.
+- Displays scan statistics and cache information.
+- Receives live progress updates during scanning.
 
-### 3\. script.js (Content Script)
+---
 
-- Executes within the context of active Naukri web pages.
-- Parses job cards, extracts embedded external links or redirects, and returns dynamic DOM payload updates back to background.js.
+## background.js (Service Worker)
 
-## 🔄 Core Workflows
+Acts as the application's central controller.
 
-### Scan Flow
+- Handles runtime messages.
+- Maintains extension state.
+- Reads/writes data from `chrome.storage.local`.
+- Generates downloadable CSV files.
+- Coordinates communication between popup and content script.
 
-Plaintext
+---
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   User clicks "Scan Current Tab"              │              ▼  popup.js triggers runtime message              │              ▼  background.js injects / signals script.js              │              ▼  script.js parses DOM for Company Apply URLs              │              ▼  background.js updates cache & broadcasts progress              │              ▼  popup.html updates live UI counters   `
+## script.js (Content Script)
 
-### Export Flow
+Runs inside Naukri pages.
 
-Plaintext
+- Parses job cards.
+- Extracts official company career page URLs.
+- Detects ATS providers (Workday, Greenhouse, Lever, etc.).
+- Sends extracted data back to the service worker.
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   User selects Download (Pending / All)              │              ▼  background.js fetches jobCache & appliedJobs              │              ▼  Filters / sorts records based on export type              │              ▼  Encodes dataset to CSV data URI & triggers chrome.downloads   `
+---
 
-## 📦 Installation & Local Setup
+# 🔄 Core Workflows
 
-1.  Bashgit clone https://github.com/your-username/naukri-company-site-scanner.git
-2.  Open Google Chrome and navigate to chrome://extensions/.
-3.  Enable **Developer mode** using the toggle in the top-right corner.
-4.  Click **Load unpacked**.
-5.  Select the root folder containing manifest.json.
+## Scan Flow
 
-## 🔑 Permissions Breakdown
+```text
+User clicks "Scan Current Tab"
+            │
+            ▼
+popup.js sends runtime message
+            │
+            ▼
+background.js starts scan
+            │
+            ▼
+script.js parses Naukri DOM
+            │
+            ▼
+Extract Company Career URLs
+            │
+            ▼
+background.js updates cache
+            │
+            ▼
+popup.js receives progress updates
+            │
+            ▼
+UI refreshes statistics
+```
 
-The extension relies on minimal required permissions defined in manifest.json:
+---
 
-JSON
+## CSV Export Flow
 
-Plain textANTLR4BashCC#CSSCoffeeScriptCMakeDartDjangoDockerEJSErlangGitGoGraphQLGroovyHTMLJavaJavaScriptJSONJSXKotlinLaTeXLessLuaMakefileMarkdownMATLABMarkupObjective-CPerlPHPPowerShell.propertiesProtocol BuffersPythonRRubySass (Sass)Sass (Scss)SchemeSQLShellSwiftSVGTSXTypeScriptWebAssemblyYAMLXML`   {    "permissions": [      "storage",      "downloads",      "scripting",      "activeTab"    ],    "host_permissions": [      "https://www.naukri.com/*"    ]  }   `
+```text
+User selects Download (Pending / All)
+            │
+            ▼
+popup.js sends export request
+            │
+            ▼
+background.js loads cached jobs
+            │
+            ▼
+Filters Pending / All
+            │
+            ▼
+Builds CSV
+            │
+            ▼
+chrome.downloads.download()
+            │
+            ▼
+CSV saved locally
+```
 
-## 🚀 Tech Stack
+---
 
-- **Extension Framework:** Chrome Extension Manifest V3
-- **Languages:** JavaScript (ES6+), HTML5, CSS3
-- **APIs Used:**
-  - chrome.storage.local
-  - chrome.downloads
-  - chrome.runtime
-  - chrome.scripting
+# 📦 Installation
 
-## 📌 Future Enhancements
+Clone the repository.
 
-- \[ \] Multi-tab parallel DOM scanning.
-- \[ \] Automatic retry logic for unrendered dynamic elements.
-- \[ \] Direct support for additional job platforms (LinkedIn, Indeed).
-- \[ \] Validation checking for broken external career page links.
+```bash
+git clone https://github.com/your-username/naukri-company-site-scanner.git
+```
 
-## 👤 Author
+Open Chrome and navigate to:
+
+```
+chrome://extensions
+```
+
+Then:
+
+1. Enable **Developer Mode**.
+2. Click **Load unpacked**.
+3. Select the project folder containing `manifest.json`.
+
+---
+
+# 🔑 Required Permissions
+
+```json
+{
+  "permissions": ["storage", "downloads", "scripting", "activeTab"],
+  "host_permissions": ["https://www.naukri.com/*"]
+}
+```
+
+### Why These Permissions?
+
+| Permission         | Purpose                                 |
+| ------------------ | --------------------------------------- |
+| `storage`          | Cache scanned jobs and application data |
+| `downloads`        | Export CSV reports                      |
+| `activeTab`        | Access the currently opened Naukri page |
+| `scripting`        | Execute the content script on demand    |
+| `host_permissions` | Restrict execution to Naukri pages      |
+
+---
+
+# 🚀 Tech Stack
+
+### Chrome Extension
+
+- Manifest V3
+- Service Worker Architecture
+
+### Languages
+
+- JavaScript (ES6+)
+- HTML5
+- CSS3
+
+### Chrome APIs
+
+- `chrome.runtime`
+- `chrome.storage.local`
+- `chrome.scripting`
+- `chrome.downloads`
+
+---
+
+# 📊 Data Flow
+
+```text
+          User
+            │
+            ▼
+      popup.html
+            │
+            ▼
+        popup.js
+            │
+            ▼
+      background.js
+        │         │
+        │         ▼
+        │    chrome.storage.local
+        │
+        ▼
+     script.js
+        │
+        ▼
+   Naukri Job Cards
+        │
+        ▼
+ Extract Career URLs
+        │
+        ▼
+background.js
+        │
+        ▼
+ popup.js UI Update
+```
+
+---
+
+# 🎯 Future Enhancements
+
+- [ ] Multi-tab parallel scanning
+- [ ] Automatic retry for dynamically loaded job cards
+- [ ] Support for LinkedIn Jobs
+- [ ] Support for Indeed
+- [ ] Broken company career page detection
+- [ ] Duplicate company detection
+- [ ] Scan history and analytics dashboard
+
+---
+
+# 👤 Author
 
 **Manash Anand**
 
-_Software Engineer • Python • Java • Chrome Extensions • Automation_
+Software Engineer • Python • Java • Chrome Extensions • Automation
+
+---
+
+## ⭐ If you found this project useful, consider giving it a star!
