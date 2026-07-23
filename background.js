@@ -53,15 +53,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.action === "clearCache") {
-    (async () => {
-      await chrome.storage.local.remove([
-        "jobCache",
-        "lastScan",
-        "appliedJobs",
-      ]);
-    })();
-
-    return true;
+    chrome.storage.local
+      .remove(["jobCache", "lastScan", "appliedJobs"])
+      .then(() => {
+        sendResponse({ success: true });
+      });
+    return true; // Keep the message channel open for sendResponse
   }
 });
 

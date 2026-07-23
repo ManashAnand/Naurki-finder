@@ -8,18 +8,18 @@ async function init() {
   document.getElementById("scanBtn").addEventListener("click", scan);
 
   document
-    .getElementById("downloadBtn")
+    .getElementById("download-btn")
     .addEventListener("click", downloadPending);
 
   document
-    .getElementById("downloadAllBtn")
+    .getElementById("download-all-btn")
     .addEventListener("click", downloadAll);
 
   document.getElementById("clearBtn").addEventListener("click", clearCache);
 }
 
 async function refreshStats() {
-  const { jobCache = {}, lastScan } = await chrome.storage.local.get([
+  const { jobCache = {}, lastScan = null } = await chrome.storage.local.get([
     "jobCache",
     "lastScan",
   ]);
@@ -27,17 +27,12 @@ async function refreshStats() {
   const cachedJobs = Object.keys(jobCache).length;
 
   const companyJobs = Object.values(jobCache).filter((job) => {
-    if (typeof job === "boolean") {
-      return job;
-    }
-
+    if (typeof job === "boolean") return job;
     return job?.hasCompanyApply === true;
   }).length;
 
   document.getElementById("cachedJobs").textContent = cachedJobs;
-
   document.getElementById("companyJobs").textContent = companyJobs;
-
   document.getElementById("lastScan").textContent = lastScan
     ? new Date(lastScan).toLocaleString()
     : "Never";
@@ -66,11 +61,19 @@ function downloadAll() {
 async function clearCache() {
   if (!confirm("Clear all cached jobs?")) return;
 
-  chrome.runtime.sendMessage({
+  // Await message completion from background script
+  const response = await chrome.runtime.sendMessage({
     action: "clearCache",
   });
 
-  setTimeout(refreshStats, 300);
+  if (response?.success) {
+    // Instantly refresh UI stats directly from cleared storage
+    await refreshStats();
+
+    // Reset progress indicator if visible
+    document.getElementById("progress").textContent = "0 / 0";
+    document.getElementById("status").textContent = "Idle";
+  }
 }
 
 function setStatus(text) {
