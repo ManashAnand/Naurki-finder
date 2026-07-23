@@ -1,5 +1,18 @@
 const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 let isScanning = false;
+const TRACKING_PARAM = "na_track";
+
+async function getAppliedJobs() {
+  const { appliedJobs = {} } = await chrome.storage.local.get("appliedJobs");
+
+  return appliedJobs;
+}
+
+async function saveAppliedJobs(appliedJobs) {
+  await chrome.storage.local.set({
+    appliedJobs,
+  });
+}
 
 async function getCache() {
   const { jobCache = {} } = await chrome.storage.local.get("jobCache");
@@ -29,23 +42,23 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
-  if (msg.action === "downloadCSV") {
-    downloadCSV();
+  if (msg.action === "downloadPendingCSV") {
+    downloadCSV(true);
+    return true;
+  }
+
+  if (msg.action === "downloadAllCSV") {
+    downloadCSV(false);
     return true;
   }
 
   if (msg.action === "clearCache") {
     (async () => {
-      await chrome.storage.local.remove(["jobCache", "lastScan"]);
-    })();
-
-    return true;
-  }
-
-  if (msg.action === "forceRescan") {
-    (async () => {
-      await chrome.storage.local.remove(["jobCache", "lastScan"]);
-      await scanCurrentTab(true);
+      await chrome.storage.local.remove([
+        "jobCache",
+        "lastScan",
+        "appliedJobs",
+      ]);
     })();
 
     return true;
@@ -216,12 +229,50 @@ async function inspectJob(tabId, job, cache) {
   });
 }
 
-async function downloadCSV() {
+async function downloadCSV(exportPendingOnly = true) {
   const jobs = await getCompanyApplyJobs();
+  const appliedJobs = await getAppliedJobs();
+
+  let filteredJobs = exportPendingOnly
+    ? jobs.filter((job) => !appliedJobs[job.jobId])
+    : [...jobs];
+
+  // Only sort when exporting all jobs
+  if (!exportPendingOnly) {
+    filteredJobs.sort((a, b) => {
+      const aApplied = appliedJobs[a.jobId];
+      const bApplied = appliedJobs[b.jobId];
+
+      // Pending first
+      if (!aApplied && bApplied) return -1;
+      if (aApplied && !bApplied) return 1;
+
+      // Both pending -> keep original order
+      if (!aApplied && !bApplied) return 0;
+
+      // Both applied -> latest applied first
+      return bApplied.appliedAt - aApplied.appliedAt;
+    });
+  }
 
   const csv = [
-    ["Title", "Company", "URL"],
-    ...jobs.map((job) => [job.title, job.company, job.url]),
+    ["Title", "Company", "URL", "Status", "Applied At"],
+    ...filteredJobs.map((job) => {
+      const trackedUrl = `${job.url}?${TRACKING_PARAM}=1`;
+      const applied = appliedJobs[job.jobId];
+
+      return [
+        job.title,
+        job.company,
+        trackedUrl,
+        applied ? "Applied" : "Pending",
+        applied
+          ? new Date(applied.appliedAt).toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+            })
+          : "",
+      ];
+    }),
   ]
     .map((row) =>
       row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","),
@@ -232,7 +283,29 @@ async function downloadCSV() {
 
   await chrome.downloads.download({
     url: dataUrl,
-    filename: "company_apply_jobs.csv",
+    filename: exportPendingOnly
+      ? "company_apply_jobs_pending.csv"
+      : "company_apply_jobs_all.csv",
     saveAs: true,
   });
 }
+
+chrome.runtime.onMessage.addListener(async (msg) => {
+  if (msg.action !== "jobOpened") return;
+
+  const appliedJobs = await getAppliedJobs();
+
+  // Don't overwrite if already marked
+  if (appliedJobs[msg.jobId]) {
+    console.log("⚡ Already marked applied:", msg.jobId);
+    return;
+  }
+
+  appliedJobs[msg.jobId] = {
+    appliedAt: new Date().toISOString(),
+  };
+
+  await saveAppliedJobs(appliedJobs);
+
+  console.log("✅ Marked applied:", msg.jobId);
+});

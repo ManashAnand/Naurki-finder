@@ -1,0 +1,280 @@
+# 🚀 Naukri Company Site Scanner
+
+A Chrome Extension that extracts **company career page URLs** from Naukri job listings, tracks applied jobs, caches scan results, and exports pending jobs to CSV.
+
+---
+
+## ✨ Features
+
+- 🔍 Scan Naukri search result pages
+- 🌐 Extract official company career websites
+- 💾 Cache scan results to avoid duplicate work
+- 📋 Track applied jobs
+- 📤 Export pending jobs to CSV
+- 🔄 Force rescan when cache expires
+- 🗑️ Clear cached data
+- 📊 Live scan statistics
+
+---
+
+# Architecture
+
+```text
+                   +----------------------+
+                   |      popup.html      |
+                   |  (Extension UI)      |
+                   +----------+-----------+
+                              |
+                              |
+                              v
+                   +----------------------+
+                   |      popup.js        |
+                   |  User Interactions   |
+                   +----------+-----------+
+                              |
+              chrome.runtime.sendMessage()
+                              |
+                              v
+          +-----------------------------------+
+          |       background.js               |
+          | (Service Worker / Controller)     |
+          +-----------------------------------+
+             |            |            |
+             |            |            |
+             |            |            |
+             |            |            |
+             |            |            |
+             |            |            |
+             |            |            |
+             v            v            v
+   +----------------+ +----------------+ +----------------+
+   | Chrome Storage | | Active Tab     | | Downloads API  |
+   | Cache / Stats  | | Content Script | | Export CSV     |
+   +-------+--------+ +--------+-------+ +----------------+
+           |                  |
+           |                  |
+           |                  |
+           |                  v
+           |        +------------------------+
+           |        |      script.js         |
+           |        | Injected into Naukri   |
+           |        | Waits for Company Site |
+           |        | Extracts URLs          |
+           |        +-----------+------------+
+           |                    |
+           |                    |
+           +--------------------+
+                    Stores Cache
+```
+
+---
+
+# Project Structure
+
+```
+.
+├── manifest.json
+├── popup.html
+├── popup.js
+├── popup.css
+├── background.js
+├── script.js
+├── icons/
+└── README.md
+```
+
+---
+
+# Component Responsibilities
+
+## popup.js
+
+Responsible for the extension UI.
+
+Features:
+
+- Start Scan
+- Download CSV
+- Clear Cache
+- Force Scan
+- Refresh statistics
+- Communicate with Background Service Worker
+
+---
+
+## background.js
+
+Acts as the central controller.
+
+Responsibilities:
+
+- Handle all extension messages
+- Maintain cache
+- Store scan history
+- Maintain applied jobs
+- Download CSV files
+- Coordinate communication between popup and content scripts
+
+---
+
+## script.js
+
+Runs inside the active Naukri tab.
+
+Responsibilities:
+
+- Wait for company site button
+- Extract company career URL
+- Detect job IDs
+- Send extracted data back to background.js
+
+---
+
+## Chrome Storage
+
+Used for:
+
+- Cached company URLs
+- Applied jobs
+- Last scan timestamp
+- Statistics
+
+This avoids rescanning already processed jobs.
+
+---
+
+## Downloads API
+
+Creates downloadable CSV files containing:
+
+- Job Title
+- Company Name
+- Career URL
+- Status
+- Applied Date
+
+---
+
+# Scan Flow
+
+```text
+User clicks Scan
+        │
+        ▼
+popup.js
+        │
+        ▼
+background.js
+        │
+        ▼
+Inject script.js
+        │
+        ▼
+Open each job
+        │
+        ▼
+Extract Company URL
+        │
+        ▼
+Store in Cache
+        │
+        ▼
+Repeat
+        │
+        ▼
+Update UI
+```
+
+---
+
+# Cache Flow
+
+```text
+Job Requested
+      │
+      ▼
+Is Job in Cache?
+      │
+ ┌────┴─────┐
+ │          │
+Yes         No
+ │          │
+ │          ▼
+ │     Scan Page
+ │          │
+ │          ▼
+ │     Save Cache
+ │          │
+ └──────►Return Result
+```
+
+---
+
+# Export Flow
+
+```text
+Download CSV
+      │
+      ▼
+Load Cached Jobs
+      │
+      ▼
+Load Applied Jobs
+      │
+      ▼
+Filter Pending Jobs
+      │
+      ▼
+Generate CSV
+      │
+      ▼
+Chrome Downloads API
+```
+
+---
+
+# Permissions
+
+```json
+{
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "downloads",
+    "scripting"
+  ]
+}
+```
+
+---
+
+# Tech Stack
+
+- Chrome Extension Manifest V3
+- JavaScript (ES6)
+- Chrome Storage API
+- Chrome Downloads API
+- Chrome Runtime Messaging
+- Chrome Scripting API
+
+---
+
+# Future Improvements
+
+- Parallel scanning
+- Retry failed scans
+- Progress persistence after browser restart
+- Multi-tab scanning
+- Duplicate company detection
+- Company career page validation
+- LinkedIn job support
+- Indeed job support
+
+---
+
+# Author
+
+**Manash Anand**
+
+Backend Engineer • Java • Python • Chrome Extensions • Automation

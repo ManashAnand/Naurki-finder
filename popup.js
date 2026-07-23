@@ -7,11 +7,15 @@ async function init() {
 
   document.getElementById("scanBtn").addEventListener("click", scan);
 
-  document.getElementById("downloadBtn").addEventListener("click", download);
+  document
+    .getElementById("downloadBtn")
+    .addEventListener("click", downloadPending);
+
+  document
+    .getElementById("downloadAllBtn")
+    .addEventListener("click", downloadAll);
 
   document.getElementById("clearBtn").addEventListener("click", clearCache);
-
-  document.getElementById("forceBtn").addEventListener("click", forceRescan);
 }
 
 async function refreshStats() {
@@ -47,9 +51,15 @@ async function scan() {
   });
 }
 
-function download() {
+function downloadPending() {
   chrome.runtime.sendMessage({
-    action: "downloadCSV",
+    action: "downloadPendingCSV",
+  });
+}
+
+function downloadAll() {
+  chrome.runtime.sendMessage({
+    action: "downloadAllCSV",
   });
 }
 
@@ -61,16 +71,6 @@ async function clearCache() {
   });
 
   setTimeout(refreshStats, 300);
-}
-
-async function forceRescan() {
-  if (!confirm("Force rescan all jobs?")) return;
-
-  setStatus("Scanning...");
-
-  chrome.runtime.sendMessage({
-    action: "forceRescan",
-  });
 }
 
 function setStatus(text) {
