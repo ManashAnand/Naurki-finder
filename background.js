@@ -1,6 +1,6 @@
 const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
 let isScanning = false;
-const TRACKING_PARAM = "na_track";
+const TRACKING_PARAMS = ["na_track", "expJD"];
 
 async function getAppliedJobs() {
   const { appliedJobs = {} } = await chrome.storage.local.get("appliedJobs");
@@ -255,7 +255,11 @@ async function downloadCSV(exportPendingOnly = true) {
   const csv = [
     ["Title", "Company", "URL", "Status", "Applied At"],
     ...filteredJobs.map((job) => {
-      const trackedUrl = `${job.url}?${TRACKING_PARAM}=1`;
+      // const trackedUrl = `${job.url}?${TRACKING_PARAM}=${"1" || "true"}`;
+      const url = new URL(job.url);
+      TRACKING_PARAMS.forEach((param) => url.searchParams.set(param, "1"));
+
+      const trackedUrl = url.toString();
       const applied = appliedJobs[job.jobId];
 
       return [
