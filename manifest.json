@@ -3,14 +3,21 @@
   "name": "Naukri Company Site Scanner",
   "version": "1.0",
 
-  "permissions": ["tabs", "activeTab", "scripting", "downloads", "storage"],
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "webRequest"
+  ],
 
   "host_permissions": ["<all_urls>"],
 
   "background": {
     "service_worker": "background.js"
   },
-  
+
   "content_scripts": [
     {
       "matches": ["https://*.naukri.com/*"],

@@ -1,7 +1,7 @@
 (() => {
   const params = new URLSearchParams(window.location.search);
 
-  if (!params.has("na_track") && !params.has("expJD")) {
+  if (params.get("na_track") !== "1") {
     return;
   }
 
