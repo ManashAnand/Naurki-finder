@@ -1,4 +1,5 @@
 const MAX_CACHE_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 let isScanning = false;
 
 const TRACKING_PARAM = "na_track";
@@ -24,7 +25,7 @@ async function markJobAsApplied(jobId) {
 
   // Don't overwrite existing appliedAt
   if (appliedJobs[jobId]) {
-    console.log("⚡ Already marked applied:", jobId);
+    console.log("[APPLIED] Already marked:", jobId);
     return;
   }
 
@@ -34,7 +35,7 @@ async function markJobAsApplied(jobId) {
 
   await saveAppliedJobs(appliedJobs);
 
-  console.log("✅ Marked appliedAt:", jobId);
+  console.log("[APPLIED] Marked appliedAt:", jobId);
 }
 
 // ============================================================
@@ -52,6 +53,8 @@ async function saveCache(jobCache) {
     jobCache,
     lastScan: Date.now(),
   });
+
+  console.log("[CACHE] Saved:", Object.keys(jobCache).length, "jobs");
 }
 
 async function getCompanyApplyJobs() {
@@ -65,26 +68,28 @@ async function getCompanyApplyJobs() {
 // ============================================================
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Extension installed");
+  console.log("[EXTENSION] Installed");
 });
 
 // ============================================================
 // TRACKED JOB / EXPIRED JOB DETECTION
 // ============================================================
 //
-// Example:
+// CSV URL:
 //
-// Our URL:
 // /job-listings-010926503896?na_track=1
 //
-// Naukri redirects to:
+// If Naukri redirects to:
+//
 // /software-development-engineer-2-jobs-in-bengaluru?expJD=true
 //
 // We remember:
+//
 // trackedTab_12345 -> 010926503896
 //
 // Then when expJD appears, we know which job expired.
 // ============================================================
+
 chrome.webRequest.onBeforeRequest.addListener(
   async (details) => {
     if (details.type !== "main_frame") {
@@ -94,7 +99,7 @@ chrome.webRequest.onBeforeRequest.addListener(
     const url = new URL(details.url);
 
     // ----------------------------------------------------------
-    // 1. Our tracked job URL
+    // Our tracked job URL
     // ----------------------------------------------------------
 
     if (url.searchParams.get(TRACKING_PARAM) === "1") {
@@ -110,13 +115,13 @@ chrome.webRequest.onBeforeRequest.addListener(
         [`trackedTab_${details.tabId}`]: jobId,
       });
 
-      console.log("🔗 Remembered tracked job:", jobId, "Tab:", details.tabId);
+      console.log("[TRACKING] Remembered job:", jobId, "| Tab:", details.tabId);
 
       return;
     }
 
     // ----------------------------------------------------------
-    // 2. Naukri expired/dead job
+    // Naukri expired/dead job
     // ----------------------------------------------------------
 
     if (url.searchParams.has("expJD")) {
@@ -127,48 +132,78 @@ chrome.webRequest.onBeforeRequest.addListener(
       const jobId = result[key];
 
       if (!jobId) {
-        console.log("⚠️ expJD found but no tracked job:", details.tabId);
+        console.log("[EXPIRED] expJD found but no tracked job:", details.tabId);
 
         return;
       }
 
-      console.log("💀 Naukri says job is expired:", jobId);
+      console.log("[EXPIRED] Naukri says job is expired:", jobId);
 
       await markJobAsApplied(jobId);
 
       await chrome.storage.session.remove(key);
 
-      console.log("✅ Expired job removed from pending:", jobId);
+      console.log("[EXPIRED] Removed from pending:", jobId);
     }
   },
   {
     urls: ["https://www.naukri.com/*"],
   },
 );
+
 // ============================================================
 // MESSAGE HANDLER
 // ============================================================
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  // ----------------------------------------------------------
+  // Scan
+  // ----------------------------------------------------------
+
   if (msg.action === "scan") {
+    console.log("[MESSAGE] Scan requested");
+
     scanCurrentTab();
+
     return true;
   }
+
+  // ----------------------------------------------------------
+  // Download pending
+  // ----------------------------------------------------------
 
   if (msg.action === "downloadPendingCSV") {
+    console.log("[MESSAGE] Download pending CSV");
+
     downloadCSV(true);
+
     return true;
   }
+
+  // ----------------------------------------------------------
+  // Download all
+  // ----------------------------------------------------------
 
   if (msg.action === "downloadAllCSV") {
+    console.log("[MESSAGE] Download all CSV");
+
     downloadCSV(false);
+
     return true;
   }
 
+  // ----------------------------------------------------------
+  // Clear cache
+  // ----------------------------------------------------------
+
   if (msg.action === "clearCache") {
+    console.log("[MESSAGE] Clear cache requested");
+
     chrome.storage.local
       .remove(["jobCache", "lastScan", "appliedJobs"])
       .then(() => {
+        console.log("[CACHE] Cleared successfully");
+
         sendResponse({
           success: true,
         });
@@ -182,13 +217,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 // SCANNING
 // ============================================================
 
-async function scanCurrentTab(force = false) {
+async function scanCurrentTab() {
   if (isScanning) {
-    console.log("Already scanning...");
+    console.log("[SCAN] Already scanning");
+
     return;
   }
 
   isScanning = true;
+
+  console.log("[SCAN] Starting");
 
   chrome.runtime.sendMessage({
     action: "progress",
@@ -203,6 +241,16 @@ async function scanCurrentTab(force = false) {
     currentWindow: true,
   });
 
+  if (!tab?.id) {
+    console.error("[SCAN] No active tab found");
+
+    isScanning = false;
+
+    return;
+  }
+
+  console.log("[SCAN] Current tab:", tab.id, tab.url);
+
   await chrome.scripting.executeScript({
     target: {
       tabId: tab.id,
@@ -212,11 +260,16 @@ async function scanCurrentTab(force = false) {
       const jobs = [...document.querySelectorAll("article.jobTuple")].map(
         (job) => ({
           jobId: job.dataset.jobId,
+
           title: job.querySelector(".title")?.innerText.trim(),
+
           company: job.querySelector(".subTitle")?.innerText.trim(),
+
           url: `https://www.naukri.com/job-listings-${job.dataset.jobId}`,
         }),
       );
+
+      console.log("[PAGE] Jobs found:", jobs.length);
 
       chrome.runtime.sendMessage({
         action: "processJobs",
@@ -235,26 +288,48 @@ chrome.runtime.onMessage.addListener(async (msg) => {
     return;
   }
 
+  console.log("[SCAN] Processing jobs:", msg.jobs.length);
+
   const cache = await getCache();
 
   let current = 0;
+
   const total = msg.jobs.length;
 
   let found = Object.values(cache).filter((job) => job.hasCompanyApply).length;
 
-  // Create one background worker tab
+  console.log("[SCAN] Cached jobs:", Object.keys(cache).length);
+
+  console.log("[SCAN] Existing company-apply jobs:", found);
+
+  // ----------------------------------------------------------
+  // Create ONE worker tab
+  // ----------------------------------------------------------
+
   const workerTab = await chrome.tabs.create({
     url: "about:blank",
     active: false,
   });
 
+  console.log("[WORKER] Created worker tab:", workerTab.id);
+
   try {
     for (const job of msg.jobs) {
+      console.log(
+        `[SCAN] ${current + 1}/${total}:`,
+        job.title,
+        "|",
+        job.company,
+      );
+
       const cachedJob = cache[job.jobId];
 
-      // Skip if cached and checked within last 7 days
+      // --------------------------------------------------------
+      // Cache check
+      // --------------------------------------------------------
+
       if (cachedJob && Date.now() - cachedJob.checkedAt < MAX_CACHE_AGE) {
-        console.log("⏩", job.title);
+        console.log("[CACHE] Skipping:", job.title);
 
         current++;
 
@@ -270,6 +345,10 @@ chrome.runtime.onMessage.addListener(async (msg) => {
 
         continue;
       }
+
+      // --------------------------------------------------------
+      // Inspect job
+      // --------------------------------------------------------
 
       await inspectJob(workerTab.id, job, cache);
 
@@ -290,8 +369,18 @@ chrome.runtime.onMessage.addListener(async (msg) => {
         .catch(() => {});
     }
   } finally {
+    // ----------------------------------------------------------
+    // Close worker only after all jobs
+    // ----------------------------------------------------------
+
+    console.log("[WORKER] Scan finished. Closing worker tab:", workerTab.id);
+
     await chrome.tabs.remove(workerTab.id);
   }
+
+  // ------------------------------------------------------------
+  // Save cache
+  // ------------------------------------------------------------
 
   await saveCache(cache);
 
@@ -307,14 +396,139 @@ chrome.runtime.onMessage.addListener(async (msg) => {
     })
     .catch(() => {});
 
-  console.log("Finished");
+  console.log("[SCAN] Finished:", current, "/", total);
 });
+
+// ============================================================
+// APPLY AUTOMATION
+// ============================================================
+
+async function applyAndCheckResult(tabId, job) {
+  console.log("[APPLY] Starting:", job.title, "|", job.company);
+
+  // ----------------------------------------------------------
+  // Wait for URL changes BEFORE clicking
+  // ----------------------------------------------------------
+
+  const result = await new Promise((resolve) => {
+    let finished = false;
+
+    const finish = (success, reason) => {
+      if (finished) {
+        return;
+      }
+
+      finished = true;
+
+      clearTimeout(timeout);
+
+      chrome.tabs.onUpdated.removeListener(listener);
+
+      resolve({
+        success,
+        reason,
+      });
+    };
+
+    const listener = (id, changeInfo) => {
+      if (id !== tabId) {
+        return;
+      }
+
+      if (!changeInfo.url) {
+        return;
+      }
+
+      console.log("[APPLY URL]", job.title, "→", changeInfo.url);
+
+      // --------------------------------------------------------
+      // Expected successful application URL
+      // --------------------------------------------------------
+
+      if (changeInfo.url.includes("/myapply/saveApply")) {
+        console.log("[APPLY SUCCESS]", job.title, "→ /myapply/saveApply");
+
+        finish(true, "saveApply detected");
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(listener);
+
+    // ----------------------------------------------------------
+    // 3 second timeout
+    // ----------------------------------------------------------
+
+    const timeout = setTimeout(() => {
+      console.log(
+        "[APPLY TIMEOUT]",
+        job.title,
+        "→ No /myapply/saveApply within 3 seconds",
+      );
+
+      finish(false, "saveApply not detected");
+    }, 3000);
+
+    // ----------------------------------------------------------
+    // Click Apply
+    // ----------------------------------------------------------
+
+    chrome.scripting
+      .executeScript({
+        target: {
+          tabId,
+        },
+
+        func: () => {
+          const btn = document.querySelector("#company-site-button");
+
+          if (!btn) {
+            return false;
+          }
+
+          btn.click();
+
+          return true;
+        },
+      })
+      .then((clickResult) => {
+        const clicked = clickResult?.[0]?.result === true;
+
+        if (clicked) {
+          console.log("[APPLY] Clicked:", job.title);
+        } else {
+          console.log("[APPLY] Button not found:", job.title);
+
+          finish(false, "button not found");
+        }
+      })
+      .catch((err) => {
+        console.error("[APPLY] Click failed:", job.title, err);
+
+        finish(false, "click failed");
+      });
+  });
+
+  if (result.success) {
+    console.log("[APPLY] Completed successfully:", job.title);
+  } else {
+    console.log(
+      "[APPLY] Moving to next job:",
+      job.title,
+      "| Reason:",
+      result.reason,
+    );
+  }
+
+  return result.success;
+}
 
 // ============================================================
 // INSPECT JOB
 // ============================================================
 
 async function inspectJob(tabId, job, cache) {
+  console.log("[INSPECT] Opening:", job.title, "|", job.url);
+
   await new Promise(async (resolve) => {
     const listener = async (id, info) => {
       if (id !== tabId) {
@@ -327,7 +541,13 @@ async function inspectJob(tabId, job, cache) {
 
       chrome.tabs.onUpdated.removeListener(listener);
 
+      console.log("[INSPECT] Page loaded:", job.title);
+
       try {
+        // ------------------------------------------------------
+        // Detect company-site Apply
+        // ------------------------------------------------------
+
         const result = await chrome.scripting.executeScript({
           target: {
             tabId,
@@ -336,19 +556,43 @@ async function inspectJob(tabId, job, cache) {
           files: ["screenshot.js"],
         });
 
+        const hasCompanyApply = result[0].result.hasCompanyApply;
+
+        // ------------------------------------------------------
+        // Cache result
+        // ------------------------------------------------------
+
         cache[job.jobId] = {
           ...job,
-          hasCompanyApply: result[0].result.hasCompanyApply,
+
+          hasCompanyApply,
+
           checkedAt: Date.now(),
         };
 
-        console.log(result[0].result.hasCompanyApply ? "✅" : "❌", job.title);
+        console.log(
+          hasCompanyApply
+            ? "[DETECT] COMPANY APPLY"
+            : "[DETECT] NO COMPANY APPLY",
+          "|",
+          job.title,
+        );
+
+        // ------------------------------------------------------
+        // Automatically click company Apply
+        // ------------------------------------------------------
+
+        if (hasCompanyApply) {
+          await applyAndCheckResult(tabId, job);
+        }
       } catch (err) {
-        console.error(err);
+        console.error("[INSPECT] Failed:", job.title, err);
 
         cache[job.jobId] = {
           ...job,
+
           hasCompanyApply: false,
+
           checkedAt: Date.now(),
         };
       }
@@ -357,6 +601,8 @@ async function inspectJob(tabId, job, cache) {
     };
 
     chrome.tabs.onUpdated.addListener(listener);
+
+    console.log("[INSPECT] Navigating worker to:", job.url);
 
     await chrome.tabs.update(tabId, {
       url: job.url,
@@ -369,6 +615,8 @@ async function inspectJob(tabId, job, cache) {
 // ============================================================
 
 async function downloadCSV(exportPendingOnly = true) {
+  console.log("[CSV] Creating:", exportPendingOnly ? "pending" : "all");
+
   const jobs = await getCompanyApplyJobs();
 
   const appliedJobs = await getAppliedJobs();
@@ -392,6 +640,7 @@ async function downloadCSV(exportPendingOnly = true) {
       const bApplied = appliedJobs[b.jobId];
 
       // Pending first
+
       if (!aApplied && bApplied) {
         return -1;
       }
@@ -401,15 +650,19 @@ async function downloadCSV(exportPendingOnly = true) {
       }
 
       // Both pending
+
       if (!aApplied && !bApplied) {
         return 0;
       }
 
       // Both applied
       // Latest applied first
+
       return new Date(bApplied.appliedAt) - new Date(aApplied.appliedAt);
     });
   }
+
+  console.log("[CSV] Jobs exported:", filteredJobs.length);
 
   // ----------------------------------------------------------
   // Build CSV
@@ -419,10 +672,6 @@ async function downloadCSV(exportPendingOnly = true) {
     ["Title", "Company", "URL", "Status", "Applied At"],
 
     ...filteredJobs.map((job) => {
-      // IMPORTANT:
-      // Only add OUR tracking parameter.
-      // DO NOT add expJD.
-
       const url = new URL(job.url);
 
       url.searchParams.set(TRACKING_PARAM, "1");
@@ -470,6 +719,8 @@ async function downloadCSV(exportPendingOnly = true) {
 
     saveAs: true,
   });
+
+  console.log("[CSV] Download started");
 }
 
 // ============================================================
@@ -485,7 +736,9 @@ chrome.runtime.onMessage.addListener(async (msg) => {
     return;
   }
 
+  console.log("[TRACKED JOB] Opened:", msg.jobId);
+
   await markJobAsApplied(msg.jobId);
 
-  console.log("✅ Tracked job opened:", msg.jobId);
+  console.log("[TRACKED JOB] Marked applied:", msg.jobId);
 });
